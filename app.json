@@ -1,11 +1,12 @@
 {
   "expo": {
-    "name": "medboom",
+    "name": "مدبوم",
     "slug": "medboomApp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/medboom-logo-700.png",
     "scheme": "medboomapp",
+    "owner": "nimamesbah",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -13,7 +14,8 @@
     },
     "android": {
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.medboom.medboomApp"
     },
     "web": {
       "output": "static",
@@ -37,6 +39,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "cbf8f50f-149e-4478-b5fb-f1bc55d67b91"
+      }
     }
   }
 }

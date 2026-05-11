@@ -1,24 +1,66 @@
+import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as NavigationBar from "expo-navigation-bar";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useRef, useState } from "react";
-// Added ImageBackground and Image below
-import { BackHandler, Image, ImageBackground, StyleSheet } from "react-native";
+import {
+  Animated,
+  BackHandler,
+  Dimensions,
+  Image,
+  ImageBackground,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 import { WebView } from "react-native-webview";
 
 const DEFAULT_URL = "https://medboom.ir";
 const STORAGE_KEY = "@saved_url";
+const FIRST_LAUNCH_KEY = "@first_launch_msg_shown"; // Key for tracking first launch
+
+const { height } = Dimensions.get("window");
+
+const toastConfig = {
+  myCustomToast: ({ text1 }: { text1?: string }) => (
+    <View
+      style={{
+        width: "90%",
+        backgroundColor: "#add8e6",
+        padding: 15,
+        borderRadius: 10,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        elevation: 5,
+        shadowColor: "#000",
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+        gap: 10,
+      }}
+    >
+      <Ionicons name="checkmark-circle" size={24} color="#008000" />
+      <Text style={{ color: "#000", fontSize: 14, fontWeight: "bold" }}>
+        {text1}
+      </Text>
+    </View>
+  ),
+};
 
 export default function App() {
   const [currentUrl, setCurrentUrl] = useState<string | null>(null);
   const [canGoBack, setCanGoBack] = useState(false);
-  // 1. Added custom splash state
   const [showSplash, setShowSplash] = useState(true);
+  const [showInstruction, setShowInstruction] = useState(false); // State for first launch message
   const webViewRef = useRef<WebView>(null);
 
-  // 2. Added splash screen timer (3 seconds)
+  // Animation Refs
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setShowSplash(false);
@@ -26,28 +68,50 @@ export default function App() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Load the saved URL on startup
+  // Load the saved URL and check for first launch
   useEffect(() => {
-    const loadUrl = async () => {
+    const loadInitData = async () => {
       try {
         const savedUrl = await AsyncStorage.getItem(STORAGE_KEY);
         setCurrentUrl(savedUrl !== null ? savedUrl : DEFAULT_URL);
+
+        // Check if instruction message has been shown before
+        const hasShownMsg = await AsyncStorage.getItem(FIRST_LAUNCH_KEY);
+        if (!hasShownMsg) {
+          setShowInstruction(true);
+        }
       } catch (e) {
         setCurrentUrl(DEFAULT_URL);
       }
     };
-    loadUrl();
+    loadInitData();
   }, []);
 
-  // Set Android Navigation Bar to Dark Mode
+  // Run opening animation when showInstruction becomes true
+  useEffect(() => {
+    if (showInstruction) {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          friction: 6,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [showInstruction]);
+
   useEffect(() => {
     async function setNavBar() {
-      await NavigationBar.setButtonStyleAsync("dark");
+      await NavigationBar.setButtonStyleAsync("light");
     }
     setNavBar();
   }, []);
 
-  // Handle Android Hardware Back Button
   useEffect(() => {
     const onBackPress = () => {
       if (canGoBack && webViewRef.current) {
@@ -65,22 +129,18 @@ export default function App() {
     return () => backSubscription.remove();
   }, [canGoBack]);
 
-  // Robust Injected JavaScript
   const injectedJS = `
-  // --- Forward console.log to React Native ---
   const originalLog = console.log;
   console.log = function(...args) {
     originalLog.apply(console, args);
     window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'CONSOLE', data: args.join(' ') }));
   };
 
-  // --- Zoom Blocking ---
   const meta = document.createElement('meta');
   meta.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0');
   meta.setAttribute('name', 'viewport');
   document.getElementsByTagName('head')[0].appendChild(meta);
 
-  // --- Touch Gesture Logic ---
   let touchTimer;
   
   document.addEventListener('touchstart', (e) => {
@@ -115,26 +175,47 @@ export default function App() {
     try {
       await AsyncStorage.setItem(STORAGE_KEY, newUrl);
       Toast.show({
-        type: "success",
+        type: "myCustomToast",
         text1: "این صفحه به عنوان صفحه پیشفرض اپلیکیشن انتخاب شد",
         position: "top",
-        visibilityTime: 4000,
+        visibilityTime: 3000,
       });
     } catch (e) {
       console.error("Failed to save URL", e);
     }
   };
 
-  // 3. Custom Splash Screen Render Logic
-  // Show splash if timer is running OR if currentUrl hasn't loaded from storage yet
+  // Close message with animation, then save flag to AsyncStorage
+  const closeInstruction = () => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 0.9,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(async () => {
+      setShowInstruction(false);
+      try {
+        await AsyncStorage.setItem(FIRST_LAUNCH_KEY, "true");
+      } catch (e) {
+        console.error("Failed to save first launch state", e);
+      }
+    });
+  };
+
   if (showSplash || !currentUrl) {
     return (
       <ImageBackground
-        source={require("../assets/images/splashBg.jpg")} // <-- UPDATE THIS ROUTE
+        source={require("../assets/images/splashBg.jpg")}
         style={styles.splashContainer}
       >
         <Image
-          source={require("../assets/images/mainPng.png")} // <-- UPDATE THIS ROUTE
+          source={require("../assets/images/mainPng.png")}
           style={styles.logo}
         />
         <StatusBar style="light" backgroundColor="#000000" />
@@ -169,9 +250,45 @@ export default function App() {
           bounces={false}
           scalesPageToFit={false}
         />
+
+        {/* First Launch Instruction Overlay (Animated) */}
+        {showInstruction && (
+          <Animated.View style={[styles.overlay, { opacity: fadeAnim }]}>
+            <Animated.View
+              style={[
+                styles.instructionBox,
+                { transform: [{ scale: scaleAnim }] },
+              ]}
+            >
+              <TouchableOpacity
+                onPress={closeInstruction}
+                style={styles.closeBtn}
+              >
+                <Text style={styles.closeBtnText}>بستن این پیغام</Text>
+                <Ionicons name="close-circle" size={22} color="#0056b3" />
+              </TouchableOpacity>
+
+              <Text style={styles.instructionText}>
+                با درود،{"\n"}
+                شما می‌توانید در صورت تمایل، صفحه اولیه اپلیکیشن مدبوم را خودتان
+                تعیین کنید.{"\n\n"}
+                روش انجام کار:{"\n"}
+                ابتدا صفحه‌ای که می‌خواهید به عنوان صفحه اولیه تنظیم شود را باز
+                کنید (مثلاً صفحه «استخدام پزشک در تهران»).{"\n"}
+                سپس دو انگشت خود را روی همان صفحه قرار داده و به مدت ۴ ثانیه نگه
+                دارید.{"\n"}
+                پس از نمایش پیغام تأیید، صفحه مورد نظر به عنوان صفحه اولیه ثبت
+                می‌شود.{"\n"}
+                با این کار، از دفعات بعد که اپ را باز می‌کنید، مستقیماً صفحه
+                انتخابی شما بارگذاری می‌شود.
+              </Text>
+            </Animated.View>
+          </Animated.View>
+        )}
+
         <StatusBar style="light" backgroundColor="#000000" />
       </SafeAreaView>
-      <Toast />
+      <Toast config={toastConfig} position="top" topOffset={height / 2 - 30} />
     </SafeAreaProvider>
   );
 }
@@ -184,7 +301,6 @@ const styles = StyleSheet.create({
   webview: {
     flex: 1,
   },
-  // 4. Added splash styles
   splashContainer: {
     flex: 1,
     justifyContent: "center",
@@ -196,5 +312,51 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
     resizeMode: "contain",
+  },
+  // Added styles for the instruction overlay
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0, 0, 0, 0.6)", // Semi-transparent dark background
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+    zIndex: 10, // Ensure it sits above WebView
+  },
+  instructionBox: {
+    backgroundColor: "#e6f3ff", // Light blue background
+    padding: 20,
+    borderRadius: 15,
+    width: "100%",
+    maxWidth: 400,
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    borderWidth: 1,
+    borderColor: "#b3d9ff",
+  },
+  closeBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end", // Align items inside to the right
+    alignSelf: "flex-end", // Align the button itself to the right
+    backgroundColor: "#cce6ff",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    marginBottom: 15,
+    gap: 5, // Gap between text and icon
+  },
+  closeBtnText: {
+    color: "#0056b3",
+    fontWeight: "bold",
+    fontSize: 14,
+  },
+  instructionText: {
+    color: "#003366", // Darker blue for readable text
+    fontSize: 15,
+    lineHeight: 28,
+    textAlign: "right", // Right-aligned for Persian text
+    fontFamily: "System",
   },
 });
