@@ -28,7 +28,7 @@
         {
           "image": "./assets/images/splashBg.jpg",
           "imageWidth": "100%",
-          "resizeMode": "contain",
+          "resizeMode": "cover",
           "backgroundColor": "#ffffff",
           "dark": {
             "backgroundColor": "#000000"
@@ -36,6 +36,7 @@
         }
       ]
     ],
+
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
